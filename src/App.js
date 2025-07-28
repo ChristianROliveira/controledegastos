@@ -240,11 +240,33 @@ export default function App() {
     cancelarEdicao();
   };
   const deletarTransacao = (id) => {
-    if (window.confirm("Deseja realmente apagar esta transação?")) {
-      setTransacoes((atual) => atual.filter((t) => t.id !== id));
-      if (editandoId === id) cancelarEdicao();
+  const transacaoAlvo = transacoes.find((t) => t.id === id);
+  if (!transacaoAlvo) return;
+
+  const descricaoBase = transacaoAlvo.descricao.split(" (parcela")[0];
+  const transacoesRelacionadas = transacoes.filter(
+    (t) =>
+      t.id === id || t.descricao.startsWith(descricaoBase + " (parcela")
+  );
+
+  if (transacoesRelacionadas.length > 1) {
+    const confirmarTodas = window.confirm(
+      `Deseja excluir todas as parcelas de "${descricaoBase}"?`
+    );
+    if (confirmarTodas) {
+      setTransacoes((atual) =>
+        atual.filter((t) => !t.descricao.startsWith(descricaoBase + " (parcela"))
+      );
+      return;
     }
-  };
+  }
+
+  const confirmarUma = window.confirm("Deseja realmente apagar esta transação?");
+  if (confirmarUma) {
+    setTransacoes((atual) => atual.filter((t) => t.id !== id));
+    if (editandoId === id) cancelarEdicao();
+  }
+};
 
   // Adicionar nova categoria na edição
   const adicionarNovaCategoria = () => {
