@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/controledegastos/static/css/main.e6c13ad2.css",
-    "main.js": "/controledegastos/static/js/main.d54f4219.js",
+    "main.js": "/controledegastos/static/js/main.412f37b2.js",
     "static/js/488.fab2c26d.chunk.js": "/controledegastos/static/js/488.fab2c26d.chunk.js",
     "index.html": "/controledegastos/index.html",
     "main.e6c13ad2.css.map": "/controledegastos/static/css/main.e6c13ad2.css.map",
-    "main.d54f4219.js.map": "/controledegastos/static/js/main.d54f4219.js.map",
+    "main.412f37b2.js.map": "/controledegastos/static/js/main.412f37b2.js.map",
     "488.fab2c26d.chunk.js.map": "/controledegastos/static/js/488.fab2c26d.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.e6c13ad2.css",
-    "static/js/main.d54f4219.js"
+    "static/js/main.412f37b2.js"
   ]
 }
