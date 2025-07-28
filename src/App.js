@@ -61,6 +61,7 @@ export default function App() {
 
   useEffect(() => {
     // Salva o usuário logado para persistir a sessão
+	// TESTE1
     if (usuarioLogado) {
       localStorage.setItem("usuarioLogado", usuarioLogado);
     } else {
