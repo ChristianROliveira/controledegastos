@@ -1,7 +1,7 @@
 {
   "name": "controle-gastos-react",
   "version": "0.1.0",
-  "homepage": "https://christianroliveira.github.io/controledegastos"
+  "homepage": "https://christianroliveira.github.io/controledegastos",
   "private": true,
   "dependencies": {
     "chart.js": "^4.5.0",
