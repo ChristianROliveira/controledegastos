@@ -1,29 +1,33 @@
+// App_com_multi_usuario.js
 import React, { useState, useEffect, useRef } from "react";
 import Chart from "chart.js/auto";
 
 const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const coresCategoria = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc949", "#af7aa1", "#ff9da7", "#9c755f", "#bab0ab"];
+const CATEGORIAS_PADRAO = ["Salário", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação"];
 
 export default function App() {
-  // --------- LOGIN ---------
-  const [logado, setLogado] = useState(() => localStorage.getItem("logado") === "true");
+  // --- STATE GERENCIAMENTO DE DADOS E USUÁRIOS ---
+  const [dadosGerais, setDadosGerais] = useState(() => {
+    const saved = localStorage.getItem("appData");
+    return saved ? JSON.parse(saved) : { users: {} };
+  });
+
+  const [usuarioLogado, setUsuarioLogado] = useState(() => localStorage.getItem("usuarioLogado") || null);
+
+  // State para o formulário de login/cadastro
+  const [isLoginView, setIsLoginView] = useState(true);
   const [usuarioInput, setUsuarioInput] = useState("");
   const [senhaInput, setSenhaInput] = useState("");
-  const usuarioCorreto = "admin";
-  const senhaCorreta = "123456";
+  const [senhaConfirmInput, setSenhaConfirmInput] = useState("");
 
-  // --------- APP FINANCEIRO ---------
+  // Deriva os dados do usuário logado a partir do state geral
+  const dadosDoUsuario = usuarioLogado ? dadosGerais.users[usuarioLogado] : null;
+  const transacoes = dadosDoUsuario?.transacoes || [];
+  const categorias = dadosDoUsuario?.categorias || [];
+
+  // --- STATE DO APP (formulários, filtros, etc.) ---
   const [pagina, setPagina] = useState("resumo");
-  const [transacoes, setTransacoes] = useState(() => {
-    const saved = localStorage.getItem("transacoes");
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [categorias, setCategorias] = useState(() => {
-    const saved = localStorage.getItem("categorias");
-    return saved ? JSON.parse(saved) : ["Salário", "Alimentação", "Transporte", "Lazer", "Saúde", "Educação"];
-  });
-
-  // Entrada
   const [descricaoEnt, setDescricaoEnt] = useState("");
   const [valorEnt, setValorEnt] = useState("");
   const [categoriaEnt, setCategoriaEnt] = useState(categorias[0] || "");
@@ -31,7 +35,6 @@ export default function App() {
   const [recorrenteEnt, setRecorrenteEnt] = useState(false);
   const [novaCatEnt, setNovaCatEnt] = useState("");
 
-  // Saída
   const [descricaoSai, setDescricaoSai] = useState("");
   const [valorSai, setValorSai] = useState("");
   const [categoriaSai, setCategoriaSai] = useState(categorias[0] || "");
@@ -39,36 +42,124 @@ export default function App() {
   const [parcelasSai, setParcelasSai] = useState(1);
   const [novaCatSai, setNovaCatSai] = useState("");
 
-  // Filtros resumo
   const [mesFiltro, setMesFiltro] = useState(meses[new Date().getMonth()]);
   const [anoFiltro, setAnoFiltro] = useState(new Date().getFullYear());
 
-  // Edição
   const [editando, setEditando] = useState(null);
   const [editDados, setEditDados] = useState({ descricao: "", valor: "", categoria: "", mes: "", ano: "", tipo: "" });
 
-  // Gráficos
   const chartPizzaEntradas = useRef(null);
   const chartPizzaSaidas = useRef(null);
   const pizzaEntradasInst = useRef(null);
   const pizzaSaidasInst = useRef(null);
 
-  // Persistência
+  // --- EFFECTS ---
   useEffect(() => {
-    localStorage.setItem("transacoes", JSON.stringify(transacoes));
-  }, [transacoes]);
-  useEffect(() => {
-    localStorage.setItem("categorias", JSON.stringify(categorias));
-  }, [categorias]);
+    // Salva todos os dados quando 'dadosGerais' muda
+    localStorage.setItem("appData", JSON.stringify(dadosGerais));
+  }, [dadosGerais]);
 
-  // Atualiza gráficos
   useEffect(() => {
+    // Salva o usuário logado para persistir a sessão
+    if (usuarioLogado) {
+      localStorage.setItem("usuarioLogado", usuarioLogado);
+    } else {
+      localStorage.removeItem("usuarioLogado");
+    }
+  }, [usuarioLogado]);
+  
+  // --- EFFECTS ---
+
+  // ... (outros useEffects) ...
+
+  // NOVO useEffect para sincronizar os formulários com as categorias do usuário
+  useEffect(() => {
+    // Se a lista de categorias do usuário existir e tiver itens...
+    if (categorias.length > 0) {
+      // ...define a primeira categoria como padrão para os formulários de entrada e saída.
+      setCategoriaEnt(categorias[0]);
+      setCategoriaSai(categorias[0]);
+    }
+  }, [categorias]); // Este código executa toda vez que a lista 'categorias' mudar (ex: ao fazer login).
+
+  useEffect(() => {
+    // Atualiza os gráficos quando a página, transações ou filtros mudam
     if (pagina === "resumo" && chartPizzaEntradas.current && chartPizzaSaidas.current) {
       atualizarGraficosResumo();
     }
-  }, [pagina, transacoes, mesFiltro, anoFiltro]);
+  }, [pagina, transacoes, mesFiltro, anoFiltro, usuarioLogado]);
 
-  // Função para atualizar gráficos
+  // --- FUNÇÕES DE DADOS (agora específicas para o usuário logado) ---
+  const setDadosParaUsuario = (chave, valor) => {
+    if (!usuarioLogado) return;
+    setDadosGerais(prev => ({
+      ...prev,
+      users: {
+        ...prev.users,
+        [usuarioLogado]: {
+          ...prev.users[usuarioLogado],
+          [chave]: valor,
+        },
+      },
+    }));
+  };
+
+  const setTransacoes = (novasTransacoes) => setDadosParaUsuario("transacoes", novasTransacoes);
+  const setCategorias = (novasCategorias) => setDadosParaUsuario("categorias", novasCategorias);
+
+
+  // --- FUNÇÕES DE AUTENTICAÇÃO ---
+  const handleLogin = (e) => {
+    e.preventDefault();
+    const user = dadosGerais.users[usuarioInput];
+    if (user && user.senha === senhaInput) {
+      setUsuarioLogado(usuarioInput);
+      setUsuarioInput("");
+      setSenhaInput("");
+    } else {
+      alert("Usuário ou senha incorretos!");
+    }
+  };
+
+  const handleCadastro = (e) => {
+    e.preventDefault();
+    if (senhaInput !== senhaConfirmInput) {
+      alert("As senhas não coincidem!");
+      return;
+    }
+    if (dadosGerais.users[usuarioInput]) {
+      alert("Este nome de usuário já existe!");
+      return;
+    }
+    if (!usuarioInput || !senhaInput) {
+        alert("Usuário e senha são obrigatórios!");
+        return;
+    }
+
+    const novoUsuario = {
+      senha: senhaInput,
+      transacoes: [],
+      categorias: CATEGORIAS_PADRAO,
+    };
+
+    setDadosGerais(prev => ({
+      ...prev,
+      users: {
+        ...prev.users,
+        [usuarioInput]: novoUsuario,
+      },
+    }));
+    setUsuarioLogado(usuarioInput);
+    setUsuarioInput("");
+    setSenhaInput("");
+    setSenhaConfirmInput("");
+  };
+
+  const handleLogout = () => {
+    setUsuarioLogado(null);
+  };
+  
+  // --- FUNÇÕES DO APP ---
   const atualizarGraficosResumo = () => {
     if (!chartPizzaEntradas.current || !chartPizzaSaidas.current) return;
     const transFiltradas = transacoes.filter(t => t.mes === mesFiltro && t.ano === anoFiltro);
@@ -109,7 +200,6 @@ export default function App() {
     criarPizza(chartPizzaSaidas.current.getContext("2d"), somaPorCategoriaSaida, pizzaSaidasInst);
   };
 
-  // Calcula saldo
   const calcularSaldo = (mesAtual, anoAtual) => {
     const entradas = transacoes
       .filter(t => t.mes === mesAtual && t.ano === anoAtual && t.tipo === "entrada")
@@ -120,7 +210,6 @@ export default function App() {
     return entradas - saidas;
   };
 
-  // Adiciona categoria
   const adicionarCategoria = (novaCat, setNovaCat, setCategoria) => {
     const catTrim = novaCat.trim();
     if (!catTrim) return;
@@ -134,7 +223,6 @@ export default function App() {
     setNovaCat("");
   };
 
-  // Adiciona entrada
   const adicionarEntrada = e => {
     e.preventDefault();
     const valNum = parseFloat(valorEnt);
@@ -179,7 +267,6 @@ export default function App() {
     setPagina("resumo");
   };
 
-  // Adiciona saída
   const adicionarSaida = e => {
     e.preventDefault();
     const valNum = parseFloat(valorSai);
@@ -213,7 +300,6 @@ export default function App() {
     setPagina("resumo");
   };
 
-  // Edição
   const iniciarEdicao = trans => {
     setEditando(trans.id);
     setEditDados({
@@ -262,11 +348,10 @@ export default function App() {
     cancelarEdicao();
   };
 
-  // Excluir transação
   const excluirTransacao = id => {
     const transacao = transacoes.find(t => t.id === id);
     if (!transacao) return;
-    const confirmacao = window.confirm("Excluir todas as parcelas/recorrências? OK = todas, Cancelar = só esta.");
+    const confirmacao = window.confirm("Excluir todas as parcelas/recorrências relacionadas? OK = todas, Cancelar = apenas esta.");
     let novas;
     if (confirmacao) {
       const descricaoBase = transacao.descricao.split(" (")[0];
@@ -277,126 +362,95 @@ export default function App() {
     setTransacoes(novas);
   };
 
-  // Login handlers
-  const handleLogin = e => {
-    e.preventDefault();
-    if (usuarioInput === usuarioCorreto && senhaInput === senhaCorreta) {
-      setLogado(true);
-      localStorage.setItem("logado", "true");
-      setUsuarioInput("");
-      setSenhaInput("");
-    } else {
-      alert("Usuário ou senha incorretos!");
-    }
-  };
+  // --- RENDERIZAÇÃO ---
 
-  const handleLogout = () => {
-    setLogado(false);
-    localStorage.removeItem("logado");
-  };
-
-  // --------- RENDER LOGIN ---------
-  if (!logado) {
+  // RENDER LOGIN / CADASTRO
+  if (!usuarioLogado) {
     return (
       <div style={{
-        backgroundColor: "#121212",
-        color: "#eee",
-        height: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        fontFamily: "Arial, sans-serif",
-        padding: 20
+        backgroundColor: "#121212", color: "#eee", height: "100vh", display: "flex",
+        justifyContent: "center", alignItems: "center", fontFamily: "Arial, sans-serif", padding: 20
       }}>
-        <form onSubmit={handleLogin} style={{
-          backgroundColor: "#1e1e1e",
-          padding: 30,
-          borderRadius: 8,
-          boxShadow: "0 0 10px #000",
-          width: "100%",
-          maxWidth: 400
+        <div style={{
+          backgroundColor: "#1e1e1e", padding: 30, borderRadius: 8,
+          boxShadow: "0 0 10px #000", width: "100%", maxWidth: 400
         }}>
-          <h2 style={{ marginBottom: 20, textAlign: "center" }}>Login</h2>
-          <div style={{ marginBottom: 15 }}>
-            <label>Usuário</label><br />
-            <input
-              type="text"
-              value={usuarioInput}
-              onChange={e => setUsuarioInput(e.target.value)}
-              required
-              style={{
-                width: "100%",
-                padding: 8,
-                borderRadius: 4,
-                border: "1px solid #333",
-                backgroundColor: "#222",
-                color: "#eee"
-              }}
-              autoFocus
-            />
-          </div>
-          <div style={{ marginBottom: 20 }}>
-            <label>Senha</label><br />
-            <input
-              type="password"
-              value={senhaInput}
-              onChange={e => setSenhaInput(e.target.value)}
-              required
-              style={{
-                width: "100%",
-                padding: 8,
-                borderRadius: 4,
-                border: "1px solid #333",
-                backgroundColor: "#222",
-                color: "#eee"
-              }}
-            />
-          </div>
-          <button type="submit" style={{
-            width: "100%",
-            padding: 10,
-            backgroundColor: "#4e79a7",
-            border: "none",
-            borderRadius: 4,
-            color: "#fff",
-            cursor: "pointer"
-          }}>
-            Entrar
+          <h2 style={{ marginBottom: 20, textAlign: "center" }}>{isLoginView ? "Login" : "Cadastro"}</h2>
+          <form onSubmit={isLoginView ? handleLogin : handleCadastro}>
+            <div style={{ marginBottom: 15 }}>
+              <label>Usuário</label><br />
+              <input
+                type="text" value={usuarioInput} onChange={e => setUsuarioInput(e.target.value)}
+                required style={{
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee", fontSize: 16
+                }} autoFocus
+              />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label>Senha</label><br />
+              <input
+                type="password" value={senhaInput} onChange={e => setSenhaInput(e.target.value)}
+                required style={{
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee", fontSize: 16
+                }}
+              />
+            </div>
+            {!isLoginView && (
+              <div style={{ marginBottom: 20 }}>
+                <label>Confirmar Senha</label><br />
+                <input
+                  type="password" value={senhaConfirmInput} onChange={e => setSenhaConfirmInput(e.target.value)}
+                  required style={{
+                    width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                    backgroundColor: "#222", color: "#eee", fontSize: 16
+                  }}
+                />
+              </div>
+            )}
+            <button type="submit" style={{
+              width: "100%", padding: 10, backgroundColor: "#4e79a7", border: "none",
+              borderRadius: 4, color: "#fff", cursor: "pointer", fontSize: 16
+            }}>
+              {isLoginView ? "Entrar" : "Cadastrar"}
+            </button>
+          </form>
+          <button
+            onClick={() => setIsLoginView(!isLoginView)}
+            style={{
+              background: "none", border: "none", color: "#aaa", cursor: "pointer",
+              marginTop: 20, textAlign: "center", width: "100%"
+            }}
+          >
+            {isLoginView ? "Não tem uma conta? Cadastre-se" : "Já tem uma conta? Faça login"}
           </button>
-        </form>
+        </div>
       </div>
     );
   }
 
-  // --------- RENDER APP ---------
+  // RENDER APP
   return (
     <div style={{
-      maxWidth: 900,
-      margin: "auto",
-      fontFamily: "Arial, sans-serif",
-      backgroundColor: "#121212",
-      color: "#eee",
-      minHeight: "100vh",
-      padding: "20px 15px 50px"
+      maxWidth: 900, margin: "auto", fontFamily: "Arial, sans-serif", backgroundColor: "#121212",
+      color: "#eee", minHeight: "100vh", padding: "20px 15px 50px"
     }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <h1>Controle de Gastos</h1>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap" }}>
+        <h2 style={{margin: "0 10px 10px 0"}}>Olá, {usuarioLogado}!</h2>
         <button
           onClick={handleLogout}
           style={{
-            backgroundColor: "#e15759",
-            border: "none",
-            color: "white",
-            borderRadius: 4,
-            cursor: "pointer",
-            padding: "6px 12px"
+            backgroundColor: "#e15759", border: "none", color: "white", borderRadius: 4,
+            cursor: "pointer", padding: "6px 12px", fontSize: 16, marginBottom: 10
           }}
         >
           Sair
         </button>
       </header>
+      
+      <h1>Controle de Gastos</h1>
 
-      {/* Menu */}
       <nav style={{ marginBottom: 20, textAlign: "center" }}>
         {["resumo", "entradas", "saidas"].map(p => (
           <button
@@ -406,17 +460,11 @@ export default function App() {
               cancelarEdicao();
             }}
             style={{
-              margin: "0 8px 12px",
-              padding: "10px 18px",
+              margin: "0 8px 12px", padding: "10px 18px",
               backgroundColor: pagina === p ? "#4e79a7" : "#333",
               color: pagina === p ? "white" : "#bbb",
-              border: "none",
-              borderRadius: 6,
-              cursor: "pointer",
-              minWidth: 90,
-              fontWeight: "600",
-              fontSize: 16,
-              transition: "background-color 0.3s"
+              border: "none", borderRadius: 6, cursor: "pointer", minWidth: 90,
+              fontWeight: "600", fontSize: 16, transition: "background-color 0.3s"
             }}
           >
             {p[0].toUpperCase() + p.slice(1)}
@@ -424,7 +472,7 @@ export default function App() {
         ))}
       </nav>
 
-      {/* Página Resumo */}
+        {/* Página Resumo */}
       {pagina === "resumo" && (
         <div>
           <h2>Resumo - {mesFiltro} {anoFiltro}</h2>
@@ -436,13 +484,8 @@ export default function App() {
                 value={mesFiltro}
                 onChange={e => setMesFiltro(e.target.value)}
                 style={{
-                  backgroundColor: "#222",
-                  color: "#eee",
-                  padding: "6px 10px",
-                  borderRadius: 6,
-                  border: "none",
-                  minWidth: 100,
-                  fontSize: 16
+                  backgroundColor: "#222", color: "#eee", padding: "6px 10px",
+                  borderRadius: 6, border: "none", minWidth: 100, fontSize: 16
                 }}
               >
                 {meses.map(m => (
@@ -454,18 +497,10 @@ export default function App() {
             <label>
               Ano:{" "}
               <input
-                type="number"
-                value={anoFiltro}
-                onChange={e => setAnoFiltro(Number(e.target.value))}
+                type="number" value={anoFiltro} onChange={e => setAnoFiltro(Number(e.target.value))}
                 style={{
-                  backgroundColor: "#222",
-                  color: "#eee",
-                  padding: "6px 10px",
-                  borderRadius: 6,
-                  border: "none",
-                  width: 100,
-                  fontSize: 16,
-                  textAlign: "center"
+                  backgroundColor: "#222", color: "#eee", padding: "6px 10px",
+                  borderRadius: 6, border: "none", width: 100, fontSize: 16, textAlign: "center"
                 }}
               />
             </label>
@@ -479,12 +514,8 @@ export default function App() {
 
           <div
             style={{
-              display: "flex",
-              flexWrap: "wrap",
-              justifyContent: "space-around",
-              gap: 40,
-              marginTop: 20,
-              marginBottom: 40
+              display: "flex", flexWrap: "wrap", justifyContent: "space-around",
+              gap: 40, marginTop: 20, marginBottom: 40
             }}
           >
             <div style={{ width: 300, height: 300 }}>
@@ -522,13 +553,8 @@ export default function App() {
                         <button
                           onClick={() => iniciarEdicao(t)}
                           style={{
-                            marginRight: 6,
-                            backgroundColor: "#4e79a7",
-                            color: "white",
-                            border: "none",
-                            borderRadius: 4,
-                            padding: "4px 8px",
-                            cursor: "pointer"
+                            marginRight: 6, backgroundColor: "#4e79a7", color: "white",
+                            border: "none", borderRadius: 4, padding: "4px 8px", cursor: "pointer"
                           }}
                         >
                           Editar
@@ -536,12 +562,8 @@ export default function App() {
                         <button
                           onClick={() => excluirTransacao(t.id)}
                           style={{
-                            backgroundColor: "#e15759",
-                            color: "white",
-                            border: "none",
-                            borderRadius: 4,
-                            padding: "4px 8px",
-                            cursor: "pointer"
+                            backgroundColor: "#e15759", color: "white", border: "none",
+                            borderRadius: 4, padding: "4px 8px", cursor: "pointer"
                           }}
                         >
                           Excluir
@@ -553,118 +575,74 @@ export default function App() {
             </table>
           </div>
 
-          {/* Editar transação */}
           {editando && (
             <div style={{
-              marginTop: 30,
-              backgroundColor: "#1e1e1e",
-              padding: 20,
-              borderRadius: 8,
-              maxWidth: 500,
-              marginLeft: "auto",
-              marginRight: "auto"
+              marginTop: 30, backgroundColor: "#1e1e1e", padding: 20, borderRadius: 8,
+              maxWidth: 500, marginLeft: "auto", marginRight: "auto"
             }}>
               <h3>Editar Transação</h3>
               <div style={{ marginBottom: 10 }}>
                 <label>Descrição</label><br />
                 <input
-                  type="text"
-                  value={editDados.descricao}
-                  onChange={e => setEditDados({ ...editDados, descricao: e.target.value })}
+                  type="text" value={editDados.descricao} onChange={e => setEditDados({ ...editDados, descricao: e.target.value })}
                   style={{
-                    width: "100%",
-                    padding: 8,
-                    borderRadius: 4,
-                    border: "1px solid #333",
-                    backgroundColor: "#222",
-                    color: "#eee"
+                    width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                    backgroundColor: "#222", color: "#eee"
                   }}
                 />
               </div>
               <div style={{ marginBottom: 10 }}>
                 <label>Valor</label><br />
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={editDados.valor}
+                  type="number" min="0" step="0.01" value={editDados.valor}
                   onChange={e => setEditDados({ ...editDados, valor: e.target.value })}
                   style={{
-                    width: "100%",
-                    padding: 8,
-                    borderRadius: 4,
-                    border: "1px solid #333",
-                    backgroundColor: "#222",
-                    color: "#eee"
+                    width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                    backgroundColor: "#222", color: "#eee"
                   }}
                 />
               </div>
               <div style={{ marginBottom: 10 }}>
                 <label>Categoria</label><br />
                 <select
-                  value={editDados.categoria}
-                  onChange={e => setEditDados({ ...editDados, categoria: e.target.value })}
+                  value={editDados.categoria} onChange={e => setEditDados({ ...editDados, categoria: e.target.value })}
                   style={{
-                    width: "100%",
-                    padding: 8,
-                    borderRadius: 4,
-                    border: "1px solid #333",
-                    backgroundColor: "#222",
-                    color: "#eee"
+                    width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                    backgroundColor: "#222", color: "#eee"
                   }}
                 >
-                  {categorias.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
+                  {categorias.map(c => (<option key={c} value={c}>{c}</option>))}
                 </select>
               </div>
               <div style={{ marginBottom: 10 }}>
                 <label>Mês</label><br />
                 <select
-                  value={editDados.mes}
-                  onChange={e => setEditDados({ ...editDados, mes: e.target.value })}
+                  value={editDados.mes} onChange={e => setEditDados({ ...editDados, mes: e.target.value })}
                   style={{
-                    width: "100%",
-                    padding: 8,
-                    borderRadius: 4,
-                    border: "1px solid #333",
-                    backgroundColor: "#222",
-                    color: "#eee"
+                    width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                    backgroundColor: "#222", color: "#eee"
                   }}
                 >
-                  {meses.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
+                  {meses.map(m => (<option key={m} value={m}>{m}</option>))}
                 </select>
               </div>
               <div style={{ marginBottom: 10 }}>
                 <label>Ano</label><br />
                 <input
-                  type="number"
-                  value={editDados.ano}
-                  onChange={e => setEditDados({ ...editDados, ano: e.target.value })}
+                  type="number" value={editDados.ano} onChange={e => setEditDados({ ...editDados, ano: e.target.value })}
                   style={{
-                    width: "100%",
-                    padding: 8,
-                    borderRadius: 4,
-                    border: "1px solid #333",
-                    backgroundColor: "#222",
-                    color: "#eee"
+                    width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                    backgroundColor: "#222", color: "#eee"
                   }}
                 />
               </div>
               <div style={{ marginBottom: 10 }}>
                 <label>Tipo</label><br />
                 <select
-                  value={editDados.tipo}
-                  onChange={e => setEditDados({ ...editDados, tipo: e.target.value })}
+                  value={editDados.tipo} onChange={e => setEditDados({ ...editDados, tipo: e.target.value })}
                   style={{
-                    width: "100%",
-                    padding: 8,
-                    borderRadius: 4,
-                    border: "1px solid #333",
-                    backgroundColor: "#222",
-                    color: "#eee"
+                    width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                    backgroundColor: "#222", color: "#eee"
                   }}
                 >
                   <option value="entrada">Entrada</option>
@@ -672,32 +650,16 @@ export default function App() {
                 </select>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <button
-                  onClick={cancelarEdicao}
-                  style={{
-                    backgroundColor: "#999",
-                    border: "none",
-                    padding: "8px 12px",
-                    borderRadius: 4,
-                    cursor: "pointer",
-                    color: "#222",
-                    fontWeight: "bold"
-                  }}
-                >
+                <button onClick={cancelarEdicao} style={{
+                    backgroundColor: "#999", border: "none", padding: "8px 12px", borderRadius: 4,
+                    cursor: "pointer", color: "#222", fontWeight: "bold"
+                  }}>
                   Cancelar
                 </button>
-                <button
-                  onClick={salvarEdicao}
-                  style={{
-                    backgroundColor: "#4e79a7",
-                    border: "none",
-                    padding: "8px 12px",
-                    borderRadius: 4,
-                    cursor: "pointer",
-                    color: "white",
-                    fontWeight: "bold"
-                  }}
-                >
+                <button onClick={salvarEdicao} style={{
+                    backgroundColor: "#4e79a7", border: "none", padding: "8px 12px", borderRadius: 4,
+                    cursor: "pointer", color: "white", fontWeight: "bold"
+                  }}>
                   Salvar
                 </button>
               </div>
@@ -713,135 +675,72 @@ export default function App() {
           <form onSubmit={adicionarEntrada} style={{ maxWidth: 400, margin: "auto" }}>
             <div style={{ marginBottom: 12 }}>
               <label>Descrição</label><br />
-              <input
-                type="text"
-                value={descricaoEnt}
-                onChange={e => setDescricaoEnt(e.target.value)}
-                required
-                style={{
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
-                }}
-                autoFocus
+              <input type="text" value={descricaoEnt} onChange={e => setDescricaoEnt(e.target.value)}
+                required style={{
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
+                }} autoFocus
               />
             </div>
             <div style={{ marginBottom: 12 }}>
               <label>Valor</label><br />
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={valorEnt}
-                onChange={e => setValorEnt(e.target.value)}
-                required
-                style={{
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
+              <input type="number" min="0" step="0.01" value={valorEnt} onChange={e => setValorEnt(e.target.value)}
+                required style={{
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
                 }}
               />
             </div>
             <div style={{ marginBottom: 12 }}>
               <label>Categoria</label><br />
-              <select
-                value={categoriaEnt}
-                onChange={e => setCategoriaEnt(e.target.value)}
-                required
-                style={{
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
+              <select value={categoriaEnt} onChange={e => setCategoriaEnt(e.target.value)}
+                required style={{
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
                 }}
               >
-                {categorias.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
+                {categorias.map(c => (<option key={c} value={c}>{c}</option>))}
               </select>
             </div>
             <div style={{ marginBottom: 12 }}>
               <label>Mês</label><br />
-              <select
-                value={mesEnt}
-                onChange={e => setMesEnt(e.target.value)}
-                required
+              <select value={mesEnt} onChange={e => setMesEnt(e.target.value)} required
                 style={{
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
                 }}
               >
-                {meses.map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+                {meses.map(m => (<option key={m} value={m}>{m}</option>))}
               </select>
             </div>
             <div style={{ marginBottom: 12 }}>
               <label>
-                <input
-                  type="checkbox"
-                  checked={recorrenteEnt}
-                  onChange={e => setRecorrenteEnt(e.target.checked)}
+                <input type="checkbox" checked={recorrenteEnt} onChange={e => setRecorrenteEnt(e.target.checked)}
                   style={{ marginRight: 8 }}
                 />
                 Recorrente (cria 12 meses)
               </label>
             </div>
             <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>
-              <input
-                type="text"
-                placeholder="Nova categoria"
-                value={novaCatEnt}
+              <input type="text" placeholder="Nova categoria" value={novaCatEnt}
                 onChange={e => setNovaCatEnt(e.target.value)}
                 style={{
-                  flexGrow: 1,
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
+                  flexGrow: 1, padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
                 }}
               />
-              <button
-                type="button"
-                onClick={() => adicionarCategoria(novaCatEnt, setNovaCatEnt, setCategoriaEnt)}
+              <button type="button" onClick={() => adicionarCategoria(novaCatEnt, setNovaCatEnt, setCategoriaEnt)}
                 style={{
-                  backgroundColor: "#59a14f",
-                  border: "none",
-                  color: "white",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                  padding: "0 12px"
-                }}
-              >
+                  backgroundColor: "#59a14f", border: "none", color: "white",
+                  borderRadius: 4, cursor: "pointer", padding: "0 12px"
+                }}>
                 +
               </button>
             </div>
-            <button
-              type="submit"
-              style={{
-                width: "100%",
-                padding: 12,
-                backgroundColor: "#4e79a7",
-                border: "none",
-                borderRadius: 4,
-                color: "#fff",
-                fontWeight: "bold",
-                cursor: "pointer"
-              }}
-            >
+            <button type="submit" style={{
+                width: "100%", padding: 12, backgroundColor: "#4e79a7", border: "none",
+                borderRadius: 4, color: "#fff", fontWeight: "bold", cursor: "pointer"
+              }}>
               Adicionar Entrada
             </button>
           </form>
@@ -855,143 +754,74 @@ export default function App() {
           <form onSubmit={adicionarSaida} style={{ maxWidth: 400, margin: "auto" }}>
             <div style={{ marginBottom: 12 }}>
               <label>Descrição</label><br />
-              <input
-                type="text"
-                value={descricaoSai}
-                onChange={e => setDescricaoSai(e.target.value)}
-                required
-                style={{
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
-                }}
-                autoFocus
+              <input type="text" value={descricaoSai} onChange={e => setDescricaoSai(e.target.value)}
+                required style={{
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
+                }} autoFocus
               />
             </div>
             <div style={{ marginBottom: 12 }}>
               <label>Valor</label><br />
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={valorSai}
-                onChange={e => setValorSai(e.target.value)}
-                required
-                style={{
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
+              <input type="number" min="0" step="0.01" value={valorSai} onChange={e => setValorSai(e.target.value)}
+                required style={{
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
                 }}
               />
             </div>
             <div style={{ marginBottom: 12 }}>
               <label>Categoria</label><br />
-              <select
-                value={categoriaSai}
-                onChange={e => setCategoriaSai(e.target.value)}
-                required
+              <select value={categoriaSai} onChange={e => setCategoriaSai(e.target.value)} required
                 style={{
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
                 }}
               >
-                {categorias.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
+                {categorias.map(c => (<option key={c} value={c}>{c}</option>))}
               </select>
             </div>
             <div style={{ marginBottom: 12 }}>
               <label>Mês</label><br />
-              <select
-                value={mesSai}
-                onChange={e => setMesSai(e.target.value)}
-                required
+              <select value={mesSai} onChange={e => setMesSai(e.target.value)} required
                 style={{
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
                 }}
               >
-                {meses.map(m => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+                {meses.map(m => (<option key={m} value={m}>{m}</option>))}
               </select>
             </div>
             <div style={{ marginBottom: 12 }}>
               <label>Parcelas</label><br />
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={parcelasSai}
-                onChange={e => setParcelasSai(e.target.value)}
-                required
+              <input type="number" min="1" step="1" value={parcelasSai}
+                onChange={e => setParcelasSai(e.target.value)} required
                 style={{
-                  width: "100%",
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
+                  width: "100%", padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
                 }}
               />
             </div>
             <div style={{ marginBottom: 12, display: "flex", gap: 8 }}>
-              <input
-                type="text"
-                placeholder="Nova categoria"
-                value={novaCatSai}
+              <input type="text" placeholder="Nova categoria" value={novaCatSai}
                 onChange={e => setNovaCatSai(e.target.value)}
                 style={{
-                  flexGrow: 1,
-                  padding: 8,
-                  borderRadius: 4,
-                  border: "1px solid #333",
-                  backgroundColor: "#222",
-                  color: "#eee"
+                  flexGrow: 1, padding: 8, borderRadius: 4, border: "1px solid #333",
+                  backgroundColor: "#222", color: "#eee"
                 }}
               />
-              <button
-                type="button"
-                onClick={() => adicionarCategoria(novaCatSai, setNovaCatSai, setCategoriaSai)}
+              <button type="button" onClick={() => adicionarCategoria(novaCatSai, setNovaCatSai, setCategoriaSai)}
                 style={{
-                  backgroundColor: "#59a14f",
-                  border: "none",
-                  color: "white",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                  padding: "0 12px"
-                }}
-              >
+                  backgroundColor: "#59a14f", border: "none", color: "white",
+                  borderRadius: 4, cursor: "pointer", padding: "0 12px"
+                }}>
                 +
               </button>
             </div>
-            <button
-              type="submit"
-              style={{
-                width: "100%",
-                padding: 12,
-                backgroundColor: "#4e79a7",
-                border: "none",
-                borderRadius: 4,
-                color: "#fff",
-                fontWeight: "bold",
-                cursor: "pointer"
-              }}
-            >
+            <button type="submit" style={{
+                width: "100%", padding: 12, backgroundColor: "#4e79a7", border: "none",
+                borderRadius: 4, color: "#fff", fontWeight: "bold", cursor: "pointer"
+              }}>
               Adicionar Saída
             </button>
           </form>
